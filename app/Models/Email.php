@@ -20,6 +20,11 @@ class Email extends Model
         ];
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     public function isExpired(): bool
     {
         return $this->expires_at->isPast();
