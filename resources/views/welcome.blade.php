@@ -129,6 +129,6 @@
             }
         }
 
-        setInterval(poll, 10000);
+        setInterval(poll, {{ config('tempmail.inbox_refresh_seconds') * 2000 }});
     </script>
 @endsection
