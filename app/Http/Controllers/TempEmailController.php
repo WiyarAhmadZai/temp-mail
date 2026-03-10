@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Email;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class TempEmailController extends Controller
 {
@@ -23,13 +26,22 @@ class TempEmailController extends Controller
         $email = Email::generateUniqueEmail();
         $request->session()->put('temp_email_id', $email->id);
 
+        // Invalidate old cache
+        $this->clearInboxCache($email->id);
+
+        Log::channel('tempmail')->info('New email generated', [
+            'email' => $email->email,
+            'ip' => $request->ip(),
+        ]);
+
         return redirect()->route('home');
     }
 
     public function inbox(Request $request)
     {
         $email = $this->resolveEmail($request);
-        $messages = $email->messages()->latest()->get();
+        $perPage = config('tempmail.messages_per_page');
+        $messages = $email->messages()->latest()->paginate($perPage);
 
         return view('inbox', [
             'email' => $email,
@@ -50,27 +62,36 @@ class TempEmailController extends Controller
 
     /**
      * AJAX endpoint: returns messages + email status as JSON for polling.
+     * Cached for 3 seconds to reduce DB load under frequent polling.
      */
     public function poll(Request $request): JsonResponse
     {
         $email = $this->resolveEmail($request);
 
-        $messages = $email->messages()->latest()->get()->map(fn ($msg) => [
-            'id' => $msg->id,
-            'sender' => $msg->sender,
-            'subject' => $msg->subject,
-            'preview' => \Illuminate\Support\Str::limit(strip_tags($msg->body), 100),
-            'time' => $msg->created_at->diffForHumans(),
-            'url' => route('message.show', $msg->id),
-        ]);
+        $data = Cache::remember(
+            "inbox:{$email->id}",
+            3, // seconds
+            function () use ($email) {
+                $messages = $email->messages()->latest()->get()->map(fn ($msg) => [
+                    'id' => $msg->id,
+                    'sender' => $msg->sender,
+                    'subject' => $msg->subject,
+                    'preview' => Str::limit(strip_tags($msg->body), 100),
+                    'time' => $msg->created_at->diffForHumans(),
+                    'url' => route('message.show', $msg->id),
+                ]);
 
-        return response()->json([
-            'email' => $email->email,
-            'expired' => $email->isExpired(),
-            'expires_at' => $email->expires_at->diffForHumans(),
-            'message_count' => $messages->count(),
-            'messages' => $messages,
-        ]);
+                return [
+                    'email' => $email->email,
+                    'expired' => $email->isExpired(),
+                    'expires_at' => $email->expires_at->diffForHumans(),
+                    'message_count' => $messages->count(),
+                    'messages' => $messages,
+                ];
+            }
+        );
+
+        return response()->json($data);
     }
 
     /**
@@ -87,5 +108,10 @@ class TempEmailController extends Controller
         }
 
         return $email;
+    }
+
+    private function clearInboxCache(int $emailId): void
+    {
+        Cache::forget("inbox:{$emailId}");
     }
 }
