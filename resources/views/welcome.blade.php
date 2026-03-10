@@ -1,140 +1,101 @@
 @extends('layouts.app')
 
-@section('title', 'Home')
+@section('title', 'Free Temporary Email')
 @section('email', $email->email)
 
-@section('styles')
-    .hero { text-align: center; padding-top: 60px; }
-    .hero h1 { font-size: 2.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 8px; }
-    .hero .subtitle { color: #94a3b8; margin-bottom: 40px; }
-
-    .email-address {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #38bdf8;
-        word-break: break-all;
-        padding: 16px;
-        background: #0f172a;
-        border-radius: 8px;
-        border: 1px solid #334155;
-        cursor: pointer;
-        transition: border-color 0.2s;
-    }
-    .email-address:hover { border-color: #38bdf8; }
-
-    .copy-hint { font-size: 0.75rem; color: #64748b; margin-top: 8px; }
-    .copy-hint.copied { color: #4ade80; }
-
-    .email-meta {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 16px;
-        font-size: 0.8rem;
-        color: #64748b;
-    }
-
-    .actions {
-        display: flex;
-        gap: 12px;
-        margin-top: 20px;
-    }
-    .actions form, .actions a, .actions button { flex: 1; }
-    .actions .btn { width: 100%; }
-
-    .inbox-badge {
-        display: inline-block;
-        background: #2563eb;
-        color: white;
-        font-size: 0.75rem;
-        padding: 2px 8px;
-        border-radius: 99px;
-        margin-left: 6px;
-    }
-@endsection
-
 @section('content')
-    <div class="hero">
-        <h1>TempMail</h1>
-        <p class="subtitle">Your temporary email address is ready</p>
+<div class="flex flex-col items-center pt-12 pb-8 md:pt-20">
+    <!-- Hero -->
+    <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">Temporary Email</h1>
+    <p class="text-slate-400 mb-8 text-center">Disposable email address. No registration. Expires in {{ config('tempmail.expiration_hours') }}h.</p>
 
-        @if(session('error'))
-            <div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.9rem;color:#fecaca;">
-                {{ session('error') }}
-            </div>
-        @endif
+    <!-- Error banner -->
+    @if(session('error'))
+    <div class="w-full max-w-xl mb-4 rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-200 text-center animate-fade-in">
+        {{ session('error') }}
+    </div>
+    @endif
 
-        <div class="card">
-            <div class="text-sm text-muted" style="text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">
-                Your Temporary Email
-            </div>
-            <div class="email-address" id="emailAddress" onclick="copyEmail()">
-                {{ $email->email }}
-            </div>
-            <p class="copy-hint" id="copyHint">Click to copy</p>
+    <!-- Email card -->
+    <div class="w-full max-w-xl rounded-2xl border border-dark-600 bg-dark-700 p-6 shadow-xl">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Your Temporary Email</label>
 
-            <div class="email-meta">
-                <span>Created: {{ $email->created_at->format('H:i, M d') }}</span>
-                <span class="text-orange" id="expiryTimer">Expires: {{ $email->expires_at->diffForHumans() }}</span>
-            </div>
+        <!-- Email display -->
+        <button onclick="copyEmail('{{ $email->email }}')" class="group relative flex w-full items-center justify-between rounded-xl border border-dark-600 bg-dark-800 px-5 py-4 text-left transition hover:border-sky-500/50">
+            <span class="text-lg md:text-xl font-semibold text-sky-400 break-all">{{ $email->email }}</span>
+            <span class="ml-3 shrink-0 rounded-lg bg-dark-600 p-2 text-slate-400 transition group-hover:bg-sky-500/20 group-hover:text-sky-400">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </span>
+        </button>
+
+        <!-- Meta row -->
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+            <span>Created {{ $email->created_at->format('H:i, M d') }}</span>
+            <span id="expiryTimer" class="text-amber-500">Expires {{ $email->expires_at->diffForHumans() }}</span>
         </div>
 
-        <div class="actions">
-            <form action="{{ route('email.generate') }}" method="POST">
+        <!-- Action buttons -->
+        <div class="mt-5 flex flex-col sm:flex-row gap-3">
+            <form action="{{ route('email.generate') }}" method="POST" class="flex-1">
                 @csrf
-                <button type="submit" class="btn btn-primary">Generate New Email</button>
+                <button type="submit" class="w-full rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-500 active:scale-[0.98]">
+                    <svg class="inline h-4 w-4 mr-1 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    New Email
+                </button>
             </form>
-            <a href="{{ route('inbox') }}" class="btn btn-secondary">
+            <a href="{{ route('inbox') }}" class="flex-1 flex items-center justify-center gap-2 rounded-xl border border-dark-600 bg-dark-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-sky-500/50 hover:text-sky-400 active:scale-[0.98]">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
                 Inbox
-                <span class="inbox-badge" id="inboxBadge" style="{{ $messageCount > 0 ? '' : 'display:none' }}">{{ $messageCount }}</span>
+                <span id="inboxBadge" class="rounded-full bg-sky-600 px-2 py-0.5 text-xs text-white {{ $messageCount > 0 ? '' : 'hidden' }}">{{ $messageCount }}</span>
             </a>
-            <button class="btn btn-secondary" onclick="copyEmail()">Copy</button>
         </div>
     </div>
 
-    <script>
-        function copyEmail() {
-            const email = document.getElementById('emailAddress').textContent.trim();
-            navigator.clipboard.writeText(email).then(() => {
-                const hint = document.getElementById('copyHint');
-                hint.textContent = 'Copied!';
-                hint.classList.add('copied');
-                setTimeout(() => {
-                    hint.textContent = 'Click to copy';
-                    hint.classList.remove('copied');
-                }, 2000);
-            });
-        }
+    <!-- How it works -->
+    <div class="mt-12 w-full max-w-xl">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 text-center">How it works</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="rounded-xl border border-dark-600 bg-dark-700 p-4 text-center">
+                <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/10 text-sky-400">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </div>
+                <p class="text-sm font-medium text-white">Get an email</p>
+                <p class="text-xs text-slate-500 mt-1">Instant random address</p>
+            </div>
+            <div class="rounded-xl border border-dark-600 bg-dark-700 p-4 text-center">
+                <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                </div>
+                <p class="text-sm font-medium text-white">Receive emails</p>
+                <p class="text-xs text-slate-500 mt-1">Messages appear live</p>
+            </div>
+            <div class="rounded-xl border border-dark-600 bg-dark-700 p-4 text-center">
+                <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <p class="text-sm font-medium text-white">Auto-deletes</p>
+                <p class="text-xs text-slate-500 mt-1">After {{ config('tempmail.expiration_hours') }} hours</p>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
 
-        // Poll for new messages and update badge + expiry timer
-        async function poll() {
-            try {
-                const res = await fetch("{{ route('api.poll') }}", {
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin'
-                });
-                const data = await res.json();
+@section('scripts')
+<script>
+    async function poll() {
+        try {
+            const res = await fetch("{{ route('api.poll') }}", { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+            const data = await res.json();
+            if (data.expired) { location.reload(); return; }
 
-                if (data.expired) {
-                    location.reload();
-                    return;
-                }
+            const badge = document.getElementById('inboxBadge');
+            if (data.message_count > 0) { badge.textContent = data.message_count; badge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); }
 
-                // Update inbox badge
-                const badge = document.getElementById('inboxBadge');
-                if (data.message_count > 0) {
-                    badge.textContent = data.message_count;
-                    badge.style.display = 'inline-block';
-                } else {
-                    badge.style.display = 'none';
-                }
-
-                // Update expiry timer
-                document.getElementById('expiryTimer').textContent = 'Expires: ' + data.expires_at;
-            } catch (e) {
-                console.error('Poll failed:', e);
-            }
-        }
-
-        setInterval(poll, {{ config('tempmail.inbox_refresh_seconds') * 2000 }});
-    </script>
+            document.getElementById('expiryTimer').textContent = 'Expires ' + data.expires_at;
+        } catch (e) { console.error('Poll failed:', e); }
+    }
+    setInterval(poll, {{ config('tempmail.inbox_refresh_seconds') * 2000 }});
+</script>
 @endsection
