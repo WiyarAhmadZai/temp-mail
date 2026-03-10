@@ -3,252 +3,179 @@
 @section('title', 'Inbox')
 @section('email', $email->email)
 
-@section('styles')
-    .inbox-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
-    }
-    .inbox-header h2 { font-size: 1.5rem; color: #f8fafc; }
+@section('content')
+<!-- Expired banner -->
+<div id="expiredBanner" class="hidden mb-4 rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-200 text-center animate-fade-in">
+    Your email has expired. <a href="{{ route('home') }}" class="text-sky-400 underline hover:text-sky-300">Get a new one</a>
+</div>
 
-    .header-right { display: flex; align-items: center; gap: 12px; }
+<!-- Top bar: email + actions -->
+<div class="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+        <a href="{{ route('home') }}" class="rounded-lg border border-dark-600 bg-dark-700 p-2 text-slate-400 hover:text-white hover:border-slate-500 transition">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <div>
+            <h1 class="text-lg font-bold text-white">Inbox</h1>
+            <p class="text-xs text-slate-500">{{ $email->email }}</p>
+        </div>
+    </div>
+    <div class="flex items-center gap-3">
+        <!-- Refresh indicator -->
+        <div id="refreshIndicator" class="flex items-center gap-2 text-xs text-slate-500">
+            <span class="relative flex h-2 w-2">
+                <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+            </span>
+            <span id="refreshText">Live</span>
+        </div>
+        <span class="text-xs text-slate-600" id="messageCount">{{ $messages->total() }} messages</span>
+    </div>
+</div>
 
-    .poll-status {
-        font-size: 0.75rem;
-        color: #64748b;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .poll-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #4ade80;
-        animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-    }
+<!-- Skeleton loader (hidden by default, shown during first load if needed) -->
+<div id="skeletonLoader" class="hidden space-y-3">
+    @for($i = 0; $i < 3; $i++)
+    <div class="rounded-xl border border-dark-600 bg-dark-700 p-4">
+        <div class="flex justify-between mb-3">
+            <div class="skeleton-line h-4 w-32 rounded"></div>
+            <div class="skeleton-line h-3 w-16 rounded"></div>
+        </div>
+        <div class="skeleton-line h-4 w-48 rounded mb-2"></div>
+        <div class="skeleton-line h-3 w-full rounded"></div>
+    </div>
+    @endfor
+</div>
 
-    .message-row {
-        display: block;
-        text-decoration: none;
-        color: inherit;
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 10px;
-        transition: border-color 0.2s, opacity 0.3s;
-    }
-    .message-row:hover { border-color: #38bdf8; }
-    .message-row.new { animation: slideIn 0.3s ease-out; }
+<!-- Message list -->
+<div id="messageList" class="space-y-2">
+    @if($messages->isEmpty())
+        <div id="emptyState" class="flex flex-col items-center justify-center py-20 text-slate-500">
+            <div class="mb-4 rounded-full bg-dark-700 p-6">
+                <svg class="h-12 w-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+            </div>
+            <p class="text-base font-medium text-slate-400">No messages yet</p>
+            <p class="mt-1 text-sm">Waiting for emails to <span class="text-sky-400">{{ $email->email }}</span></p>
+        </div>
+    @else
+        @foreach($messages as $message)
+            <a href="{{ route('message.show', $message->id) }}" class="group block rounded-xl border border-dark-600 bg-dark-700 p-4 transition hover:border-sky-500/30 hover:bg-dark-700/80" data-id="{{ $message->id }}">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="h-8 w-8 shrink-0 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 text-xs font-bold">
+                                {{ strtoupper(substr($message->sender, 0, 1)) }}
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-white truncate">{{ $message->sender }}</p>
+                                <p class="text-sm text-slate-300 truncate group-hover:text-sky-400 transition">{{ $message->subject }}</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-500 truncate ml-10">{{ Str::limit(strip_tags($message->body), 120) }}</p>
+                    </div>
+                    <span class="shrink-0 text-xs text-slate-600 whitespace-nowrap">{{ $message->created_at->diffForHumans(short: true) }}</span>
+                </div>
+            </a>
+        @endforeach
+    @endif
+</div>
 
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .message-sender {
-        font-weight: 600;
-        color: #f8fafc;
-        margin-bottom: 4px;
-        font-size: 0.95rem;
-    }
-
-    .message-subject {
-        color: #94a3b8;
-        font-size: 0.9rem;
-        margin-bottom: 4px;
-    }
-
-    .message-preview {
-        color: #64748b;
-        font-size: 0.8rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .message-time {
-        float: right;
-        font-size: 0.75rem;
-        color: #64748b;
-    }
-
-    .empty-inbox {
-        text-align: center;
-        padding: 60px 20px;
-        color: #64748b;
-    }
-    .empty-inbox .icon { font-size: 3rem; margin-bottom: 16px; }
-    .empty-inbox p { font-size: 1rem; }
-
-    .expired-banner {
-        background: #7f1d1d;
-        border: 1px solid #dc2626;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 16px;
-        text-align: center;
-        font-size: 0.9rem;
-        color: #fecaca;
-        display: none;
-    }
+<!-- Pagination -->
+@if($messages->hasPages())
+<div class="mt-6 flex items-center justify-center gap-2">
+    @if($messages->onFirstPage())
+        <span class="rounded-lg border border-dark-600 bg-dark-700 px-3 py-2 text-xs text-slate-600 cursor-not-allowed">Previous</span>
+    @else
+        <a href="{{ $messages->previousPageUrl() }}" class="rounded-lg border border-dark-600 bg-dark-700 px-3 py-2 text-xs text-slate-300 hover:border-sky-500/50 transition">Previous</a>
+    @endif
+    <span class="px-3 py-2 text-xs text-slate-500">{{ $messages->currentPage() }} / {{ $messages->lastPage() }}</span>
+    @if($messages->hasMorePages())
+        <a href="{{ $messages->nextPageUrl() }}" class="rounded-lg border border-dark-600 bg-dark-700 px-3 py-2 text-xs text-slate-300 hover:border-sky-500/50 transition">Next</a>
+    @else
+        <span class="rounded-lg border border-dark-600 bg-dark-700 px-3 py-2 text-xs text-slate-600 cursor-not-allowed">Next</span>
+    @endif
+</div>
+@endif
 @endsection
 
-@section('content')
-    <div class="expired-banner" id="expiredBanner">
-        Your email has expired. <a href="{{ route('home') }}" style="color:#38bdf8;text-decoration:underline;">Get a new one</a>
-    </div>
+@section('scripts')
+<script>
+    const POLL_INTERVAL = {{ config('tempmail.inbox_refresh_seconds') * 1000 }};
+    const pollUrl = "{{ route('api.poll') }}";
+    let knownIds = new Set([...document.querySelectorAll('[data-id]')].map(el => parseInt(el.dataset.id)));
 
-    <div class="inbox-header">
-        <h2>Inbox <span id="messageCount" class="text-muted text-sm">({{ $messages->total() }})</span></h2>
-        <div class="header-right">
-            <span class="poll-status">
-                <span class="poll-dot" id="pollDot"></span>
-                <span id="pollText">Auto-refresh on</span>
-            </span>
-            <a href="{{ route('home') }}" class="btn btn-secondary btn-sm">Back</a>
-        </div>
-    </div>
+    function esc(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
 
-    <div id="messageList">
-        @if($messages->isEmpty())
-            <div class="empty-inbox" id="emptyState">
-                <div class="icon">&#9993;</div>
-                <p>No messages yet</p>
-                <p class="text-sm mt-2">Messages sent to <strong class="text-sky">{{ $email->email }}</strong> will appear here.</p>
+    function renderMessage(msg) {
+        const initial = msg.sender.charAt(0).toUpperCase();
+        return `<a href="${esc(msg.url)}" class="group block rounded-xl border border-dark-600 bg-dark-700 p-4 transition hover:border-sky-500/30 animate-slide-up" data-id="${msg.id}">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="h-8 w-8 shrink-0 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 text-xs font-bold">${esc(initial)}</span>
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-white truncate">${esc(msg.sender)}</p>
+                            <p class="text-sm text-slate-300 truncate">${esc(msg.subject)}</p>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 truncate ml-10">${esc(msg.preview)}</p>
+                </div>
+                <span class="shrink-0 text-xs text-slate-600 whitespace-nowrap">${esc(msg.time)}</span>
             </div>
-        @else
-            @foreach($messages as $message)
-                <a href="{{ route('message.show', $message->id) }}" class="message-row" data-id="{{ $message->id }}">
-                    <span class="message-time">{{ $message->created_at->diffForHumans() }}</span>
-                    <div class="message-sender">{{ $message->sender }}</div>
-                    <div class="message-subject">{{ $message->subject }}</div>
-                    <div class="message-preview">{{ Str::limit(strip_tags($message->body), 100) }}</div>
-                </a>
-            @endforeach
-        @endif
-    </div>
+        </a>`;
+    }
 
-    @if($messages->hasPages())
-        <div style="margin-top:20px; display:flex; justify-content:center; gap:8px;">
-            @if($messages->onFirstPage())
-                <span class="btn btn-secondary btn-sm" style="opacity:0.5;">Previous</span>
-            @else
-                <a href="{{ $messages->previousPageUrl() }}" class="btn btn-secondary btn-sm">Previous</a>
-            @endif
+    async function poll() {
+        const indicator = document.getElementById('refreshText');
+        indicator.textContent = 'Checking...';
 
-            <span class="text-muted text-sm" style="padding:6px 14px;">
-                Page {{ $messages->currentPage() }} of {{ $messages->lastPage() }}
-            </span>
+        try {
+            const res = await fetch(pollUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+            const data = await res.json();
 
-            @if($messages->hasMorePages())
-                <a href="{{ $messages->nextPageUrl() }}" class="btn btn-secondary btn-sm">Next</a>
-            @else
-                <span class="btn btn-secondary btn-sm" style="opacity:0.5;">Next</span>
-            @endif
-        </div>
-    @endif
+            if (data.expired) { document.getElementById('expiredBanner').classList.remove('hidden'); indicator.textContent = 'Expired'; return; }
 
-    <script>
-        const POLL_INTERVAL = {{ config('tempmail.inbox_refresh_seconds') * 1000 }};
-        const pollUrl = "{{ route('api.poll') }}";
-        let knownIds = new Set(
-            [...document.querySelectorAll('.message-row[data-id]')].map(el => parseInt(el.dataset.id))
-        );
+            document.getElementById('messageCount').textContent = data.message_count + ' messages';
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+            const list = document.getElementById('messageList');
+            const empty = document.getElementById('emptyState');
 
-        function renderMessage(msg) {
-            return `<a href="${escapeHtml(msg.url)}" class="message-row new" data-id="${msg.id}">
-                <span class="message-time">${escapeHtml(msg.time)}</span>
-                <div class="message-sender">${escapeHtml(msg.sender)}</div>
-                <div class="message-subject">${escapeHtml(msg.subject)}</div>
-                <div class="message-preview">${escapeHtml(msg.preview)}</div>
-            </a>`;
-        }
-
-        async function poll() {
-            try {
-                const res = await fetch(pollUrl, {
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin'
-                });
-                const data = await res.json();
-
-                // Handle expired email
-                if (data.expired) {
-                    document.getElementById('expiredBanner').style.display = 'block';
-                    return;
-                }
-
-                // Update message count
-                document.getElementById('messageCount').textContent = `(${data.message_count})`;
-
-                const list = document.getElementById('messageList');
-                const empty = document.getElementById('emptyState');
-
-                if (data.messages.length === 0 && !empty) {
-                    list.innerHTML = `<div class="empty-inbox" id="emptyState">
-                        <div class="icon">&#9993;</div>
-                        <p>No messages yet</p>
-                        <p class="text-sm mt-2">Messages sent to <strong class="text-sky">${escapeHtml(data.email)}</strong> will appear here.</p>
-                    </div>`;
-                    knownIds.clear();
-                    return;
-                }
-
-                // Check for new messages
+            if (data.messages.length === 0 && !empty) {
+                list.innerHTML = `<div id="emptyState" class="flex flex-col items-center justify-center py-20 text-slate-500">
+                    <div class="mb-4 rounded-full bg-dark-700 p-6"><svg class="h-12 w-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg></div>
+                    <p class="text-base font-medium text-slate-400">No messages yet</p>
+                    <p class="mt-1 text-sm">Waiting for emails to <span class="text-sky-400">${esc(data.email)}</span></p></div>`;
+                knownIds.clear();
+            } else {
                 const newMsgs = data.messages.filter(m => !knownIds.has(m.id));
                 if (newMsgs.length > 0) {
-                    // Remove empty state if present
                     if (empty) empty.remove();
-
-                    // Prepend new messages (they come sorted latest-first)
-                    const firstExisting = list.querySelector('.message-row');
+                    const first = list.querySelector('[data-id]');
                     newMsgs.reverse().forEach(msg => {
-                        const temp = document.createElement('div');
-                        temp.innerHTML = renderMessage(msg);
-                        const el = temp.firstElementChild;
-                        if (firstExisting) {
-                            list.insertBefore(el, firstExisting);
-                        } else {
-                            list.appendChild(el);
-                        }
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = renderMessage(msg);
+                        const el = tmp.firstElementChild;
+                        first ? list.insertBefore(el, first) : list.appendChild(el);
                         knownIds.add(msg.id);
                     });
                 }
 
-                // Remove messages that no longer exist on server
                 const serverIds = new Set(data.messages.map(m => m.id));
-                document.querySelectorAll('.message-row[data-id]').forEach(el => {
+                document.querySelectorAll('[data-id]').forEach(el => {
                     const id = parseInt(el.dataset.id);
-                    if (!serverIds.has(id)) {
-                        el.remove();
-                        knownIds.delete(id);
-                    }
+                    if (!serverIds.has(id)) { el.remove(); knownIds.delete(id); }
                 });
 
-                // Update timestamps on existing messages
                 data.messages.forEach(msg => {
-                    const el = document.querySelector(`.message-row[data-id="${msg.id}"] .message-time`);
-                    if (el) el.textContent = msg.time;
+                    const timeEl = document.querySelector(`[data-id="${msg.id}"] .whitespace-nowrap`);
+                    if (timeEl) timeEl.textContent = msg.time;
                 });
-
-            } catch (e) {
-                console.error('Poll failed:', e);
             }
-        }
+        } catch (e) { console.error('Poll failed:', e); }
 
-        setInterval(poll, POLL_INTERVAL);
-    </script>
+        setTimeout(() => { indicator.textContent = 'Live'; }, 1000);
+    }
+
+    setInterval(poll, POLL_INTERVAL);
+</script>
 @endsection
