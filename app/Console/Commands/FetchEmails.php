@@ -5,22 +5,32 @@ namespace App\Console\Commands;
 use App\Models\Email;
 use App\Models\Message;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Webklex\IMAP\Facades\Client;
 
 class FetchEmails extends Command
 {
-    protected $signature = 'emails:fetch {--limit=50 : Max emails to process per run}';
+    protected $signature = 'emails:fetch {--limit= : Max emails to process per run}';
 
     protected $description = 'Fetch incoming emails from IMAP and store them for matching temp addresses';
 
+    private function log(): \Psr\Log\LoggerInterface
+    {
+        return Log::channel('tempmail');
+    }
+
     public function handle(): int
     {
-        $this->info('Connecting to IMAP server...');
+        $limit = (int) ($this->option('limit') ?: config('tempmail.fetch_limit'));
+        $domain = config('tempmail.domain');
+
+        $this->log()->info('Starting email fetch', ['limit' => $limit, 'domain' => $domain]);
 
         try {
             $client = Client::account('default');
             $client->connect();
         } catch (\Exception $e) {
+            $this->log()->error('IMAP connection failed', ['error' => $e->getMessage()]);
             $this->error('IMAP connection failed: ' . $e->getMessage());
             return self::FAILURE;
         }
@@ -28,23 +38,20 @@ class FetchEmails extends Command
         $folder = $client->getFolder('INBOX');
 
         if (!$folder) {
+            $this->log()->error('Could not open INBOX folder');
             $this->error('Could not open INBOX folder.');
             $client->disconnect();
             return self::FAILURE;
         }
 
-        $this->info('Fetching unseen messages...');
-
         $messages = $folder->messages()
             ->unseen()
-            ->limit((int) $this->option('limit'))
+            ->limit($limit)
             ->get();
 
-        $stored = 0;
-        $skipped = 0;
-        $unmatched = 0;
+        $stats = ['stored' => 0, 'skipped' => 0, 'unmatched' => 0, 'wrong_domain' => 0];
 
-        // Preload all active temp email addresses for fast lookup
+        // Preload all active temp email addresses for O(1) lookup
         $activeEmails = Email::where('expires_at', '>', now())
             ->pluck('id', 'email')
             ->toArray();
@@ -54,46 +61,66 @@ class FetchEmails extends Command
 
             // Skip duplicates by IMAP Message-ID
             if ($messageId && Message::where('message_id', $messageId)->exists()) {
-                $skipped++;
+                $stats['skipped']++;
                 continue;
             }
 
-            // Extract recipients (To + CC)
+            // Extract and filter recipients
             $recipients = $this->extractRecipients($imapMessage);
+            $ourRecipients = array_filter($recipients, fn ($addr) => Email::belongsToDomain($addr));
 
-            // Match against our temp emails
+            if (empty($ourRecipients)) {
+                $stats['wrong_domain']++;
+                $this->log()->debug('Ignored email for foreign domain', [
+                    'recipients' => $recipients,
+                    'sender' => $this->extractSender($imapMessage),
+                ]);
+                $imapMessage->setFlag('Seen');
+                continue;
+            }
+
+            // Match against our active temp emails
             $matched = false;
-            foreach ($recipients as $recipient) {
-                $recipient = strtolower(trim($recipient));
+            foreach ($ourRecipients as $recipient) {
+                $normalized = Email::normalizeEmail($recipient);
 
-                if (isset($activeEmails[$recipient])) {
-                    $emailId = $activeEmails[$recipient];
-
+                if (isset($activeEmails[$normalized])) {
                     Message::create([
-                        'email_id' => $emailId,
+                        'email_id' => $activeEmails[$normalized],
                         'message_id' => $messageId,
                         'sender' => $this->extractSender($imapMessage),
                         'subject' => (string) $imapMessage->getSubject(),
                         'body' => $this->extractBody($imapMessage),
                     ]);
 
-                    $stored++;
+                    $stats['stored']++;
                     $matched = true;
-                    break; // One match is enough
+
+                    $this->log()->info('Stored message', [
+                        'to' => $normalized,
+                        'from' => $this->extractSender($imapMessage),
+                        'subject' => (string) $imapMessage->getSubject(),
+                    ]);
+
+                    break;
                 }
             }
 
             if (!$matched) {
-                $unmatched++;
+                $stats['unmatched']++;
+                $this->log()->debug('No active temp email matched', [
+                    'recipients' => $ourRecipients,
+                ]);
             }
 
-            // Mark as seen so we don't re-process
             $imapMessage->setFlag('Seen');
         }
 
         $client->disconnect();
 
-        $this->info("Done. Stored: {$stored} | Skipped (duplicate): {$skipped} | Unmatched: {$unmatched}");
+        $summary = "Stored: {$stats['stored']} | Duplicates: {$stats['skipped']} | Unmatched: {$stats['unmatched']} | Wrong domain: {$stats['wrong_domain']}";
+        $this->log()->info('Fetch complete', $stats);
+        $this->info($summary);
 
         return self::SUCCESS;
     }
@@ -105,20 +132,13 @@ class FetchEmails extends Command
     {
         $recipients = [];
 
-        $to = $message->getTo();
-        if ($to) {
-            foreach ($to->toArray() as $address) {
-                if (isset($address->mail)) {
-                    $recipients[] = $address->mail;
-                }
-            }
-        }
-
-        $cc = $message->getCc();
-        if ($cc) {
-            foreach ($cc->toArray() as $address) {
-                if (isset($address->mail)) {
-                    $recipients[] = $address->mail;
+        foreach (['getTo', 'getCc'] as $method) {
+            $header = $message->$method();
+            if ($header) {
+                foreach ($header->toArray() as $address) {
+                    if (isset($address->mail)) {
+                        $recipients[] = Email::normalizeEmail($address->mail);
+                    }
                 }
             }
         }
