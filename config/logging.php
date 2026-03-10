@@ -127,6 +127,14 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'tempmail' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/tempmail.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
