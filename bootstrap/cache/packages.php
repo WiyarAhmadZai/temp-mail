@@ -41,4 +41,15 @@
       0 => 'Termwind\\Laravel\\TermwindServiceProvider',
     ),
   ),
+  'webklex/laravel-imap' => 
+  array (
+    'aliases' => 
+    array (
+      'Client' => 'Webklex\\IMAP\\Facades\\Client',
+    ),
+    'providers' => 
+    array (
+      0 => 'Webklex\\IMAP\\Providers\\LaravelServiceProvider',
+    ),
+  ),
 );
