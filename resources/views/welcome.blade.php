@@ -100,5 +100,37 @@
                 }, 2000);
             });
         }
+
+        // Poll for new messages and update badge + expiry timer
+        async function poll() {
+            try {
+                const res = await fetch("{{ route('api.poll') }}", {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+
+                if (data.expired) {
+                    location.reload();
+                    return;
+                }
+
+                // Update inbox badge
+                const badge = document.getElementById('inboxBadge');
+                if (data.message_count > 0) {
+                    badge.textContent = data.message_count;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+
+                // Update expiry timer
+                document.getElementById('expiryTimer').textContent = 'Expires: ' + data.expires_at;
+            } catch (e) {
+                console.error('Poll failed:', e);
+            }
+        }
+
+        setInterval(poll, 10000);
     </script>
 @endsection
