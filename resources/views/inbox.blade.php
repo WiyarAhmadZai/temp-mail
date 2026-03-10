@@ -136,7 +136,7 @@
     </div>
 
     <script>
-        const POLL_INTERVAL = 5000;
+        const POLL_INTERVAL = {{ config('tempmail.inbox_refresh_seconds') * 1000 }};
         const pollUrl = "{{ route('api.poll') }}";
         let knownIds = new Set(
             [...document.querySelectorAll('.message-row[data-id]')].map(el => parseInt(el.dataset.id))
