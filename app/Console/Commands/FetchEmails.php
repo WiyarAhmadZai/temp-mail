@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\ProcessIncomingEmail;
 use App\Models\Email;
 use App\Models\Message;
 use Illuminate\Console\Command;
@@ -10,7 +11,7 @@ use Webklex\IMAP\Facades\Client;
 
 class FetchEmails extends Command
 {
-    protected $signature = 'emails:fetch {--limit= : Max emails to process per run}';
+    protected $signature = 'emails:fetch {--limit= : Max emails to process per run} {--sync : Process synchronously instead of queuing}';
 
     protected $description = 'Fetch incoming emails from IMAP and store them for matching temp addresses';
 
@@ -22,9 +23,15 @@ class FetchEmails extends Command
     public function handle(): int
     {
         $limit = (int) ($this->option('limit') ?: config('tempmail.fetch_limit'));
+        $sync = $this->option('sync');
         $domain = config('tempmail.domain');
+        $maxBodySize = config('tempmail.max_body_size');
 
-        $this->log()->info('Starting email fetch', ['limit' => $limit, 'domain' => $domain]);
+        $this->log()->info('Starting email fetch', [
+            'limit' => $limit,
+            'domain' => $domain,
+            'mode' => $sync ? 'sync' : 'queue',
+        ]);
 
         try {
             $client = Client::account('default');
@@ -49,29 +56,48 @@ class FetchEmails extends Command
             ->limit($limit)
             ->get();
 
-        $stats = ['stored' => 0, 'skipped' => 0, 'unmatched' => 0, 'wrong_domain' => 0];
+        $stats = [
+            'stored' => 0,
+            'queued' => 0,
+            'skipped_duplicate' => 0,
+            'skipped_no_id' => 0,
+            'skipped_too_large' => 0,
+            'wrong_domain' => 0,
+            'unmatched' => 0,
+        ];
 
-        // Preload all active temp email addresses for O(1) lookup
-        $activeEmails = Email::where('expires_at', '>', now())
-            ->pluck('id', 'email')
-            ->toArray();
+        // Preload active temp emails for O(1) lookup (sync mode only)
+        $activeEmails = $sync
+            ? Email::where('expires_at', '>', now())->pluck('id', 'email')->toArray()
+            : [];
 
         foreach ($messages as $imapMessage) {
             $messageId = $imapMessage->getMessageId()?->toString();
 
-            // Skip duplicates by IMAP Message-ID
-            if ($messageId && Message::where('message_id', $messageId)->exists()) {
-                $stats['skipped']++;
+            // Spam filter: reject emails without a Message-ID
+            if (empty($messageId)) {
+                $stats['skipped_no_id']++;
+                $this->log()->debug('Skipped: no Message-ID header', [
+                    'sender' => $this->extractSender($imapMessage),
+                ]);
+                $imapMessage->setFlag('Seen');
                 continue;
             }
 
-            // Extract and filter recipients
+            // Dedup check
+            if (Message::where('message_id', $messageId)->exists()) {
+                $stats['skipped_duplicate']++;
+                $imapMessage->setFlag('Seen');
+                continue;
+            }
+
+            // Extract and filter recipients by domain
             $recipients = $this->extractRecipients($imapMessage);
             $ourRecipients = array_filter($recipients, fn ($addr) => Email::belongsToDomain($addr));
 
             if (empty($ourRecipients)) {
                 $stats['wrong_domain']++;
-                $this->log()->debug('Ignored email for foreign domain', [
+                $this->log()->debug('Ignored: foreign domain', [
                     'recipients' => $recipients,
                     'sender' => $this->extractSender($imapMessage),
                 ]);
@@ -79,38 +105,44 @@ class FetchEmails extends Command
                 continue;
             }
 
-            // Match against our active temp emails
-            $matched = false;
-            foreach ($ourRecipients as $recipient) {
+            // Extract body and check size
+            $body = $this->extractBody($imapMessage);
+            if (strlen($body) > $maxBodySize) {
+                $stats['skipped_too_large']++;
+                $this->log()->warning('Skipped: body too large', [
+                    'size' => strlen($body),
+                    'max' => $maxBodySize,
+                    'sender' => $this->extractSender($imapMessage),
+                ]);
+                $imapMessage->setFlag('Seen');
+                continue;
+            }
+
+            $sender = $this->extractSender($imapMessage);
+            $subject = (string) $imapMessage->getSubject();
+            $recipient = reset($ourRecipients);
+
+            if ($sync) {
+                // Synchronous mode: insert directly
                 $normalized = Email::normalizeEmail($recipient);
 
                 if (isset($activeEmails[$normalized])) {
                     Message::create([
                         'email_id' => $activeEmails[$normalized],
                         'message_id' => $messageId,
-                        'sender' => $this->extractSender($imapMessage),
-                        'subject' => (string) $imapMessage->getSubject(),
-                        'body' => $this->extractBody($imapMessage),
+                        'sender' => $sender,
+                        'subject' => $subject,
+                        'body' => $body,
                     ]);
-
                     $stats['stored']++;
-                    $matched = true;
-
-                    $this->log()->info('Stored message', [
-                        'to' => $normalized,
-                        'from' => $this->extractSender($imapMessage),
-                        'subject' => (string) $imapMessage->getSubject(),
-                    ]);
-
-                    break;
+                } else {
+                    $stats['unmatched']++;
+                    $this->log()->debug('No active temp email matched', ['recipient' => $normalized]);
                 }
-            }
-
-            if (!$matched) {
-                $stats['unmatched']++;
-                $this->log()->debug('No active temp email matched', [
-                    'recipients' => $ourRecipients,
-                ]);
+            } else {
+                // Queue mode: dispatch job for async processing
+                ProcessIncomingEmail::dispatch($recipient, $sender, $subject, $body, $messageId);
+                $stats['queued']++;
             }
 
             $imapMessage->setFlag('Seen');
@@ -118,16 +150,17 @@ class FetchEmails extends Command
 
         $client->disconnect();
 
-        $summary = "Stored: {$stats['stored']} | Duplicates: {$stats['skipped']} | Unmatched: {$stats['unmatched']} | Wrong domain: {$stats['wrong_domain']}";
         $this->log()->info('Fetch complete', $stats);
-        $this->info($summary);
+        $this->info(
+            "Stored: {$stats['stored']} | Queued: {$stats['queued']} | "
+            . "Duplicates: {$stats['skipped_duplicate']} | No ID: {$stats['skipped_no_id']} | "
+            . "Too large: {$stats['skipped_too_large']} | Wrong domain: {$stats['wrong_domain']} | "
+            . "Unmatched: {$stats['unmatched']}"
+        );
 
         return self::SUCCESS;
     }
 
-    /**
-     * Extract all recipient addresses from To and CC headers.
-     */
     private function extractRecipients($message): array
     {
         $recipients = [];
@@ -146,9 +179,6 @@ class FetchEmails extends Command
         return $recipients;
     }
 
-    /**
-     * Extract the sender's email address.
-     */
     private function extractSender($message): string
     {
         $from = $message->getFrom();
@@ -162,9 +192,6 @@ class FetchEmails extends Command
         return 'unknown@unknown';
     }
 
-    /**
-     * Extract the message body, preferring text over HTML.
-     */
     private function extractBody($message): string
     {
         $textBody = $message->getTextBody();
