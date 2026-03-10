@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Message extends Model
 {
-    protected $fillable = ['email_id', 'sender', 'subject', 'body'];
+    protected $fillable = ['email_id', 'message_id', 'sender', 'subject', 'body'];
 
     public function email(): BelongsTo
     {
