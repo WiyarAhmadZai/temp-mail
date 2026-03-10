@@ -1,108 +1,85 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TempMail - Free temporary email address. Receive emails instantly, no registration required.">
     <title>TempMail - @yield('title', 'Temporary Email')</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { 900: '#0b1120', 800: '#0f172a', 700: '#1e293b', 600: '#334155' },
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                        'pulse-dot': 'pulseDot 2s ease-in-out infinite',
+                        'skeleton': 'skeleton 1.5s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn: { from: { opacity: 0 }, to: { opacity: 1 } },
+                        slideUp: { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+                        pulseDot: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } },
+                        skeleton: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-height: 100vh;
-            background: #0f172a;
-            color: #e2e8f0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+        .skeleton-line {
+            background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+            background-size: 200% 100%;
+            animation: skeleton 1.5s ease-in-out infinite;
         }
-
-        .navbar {
-            width: 100%;
-            padding: 16px 24px;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .navbar-brand {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: #f8fafc;
-            text-decoration: none;
-        }
-
-        .navbar-email {
-            font-size: 0.85rem;
-            color: #38bdf8;
-            cursor: pointer;
-        }
-
-        .main {
-            flex: 1;
-            width: 100%;
-            max-width: 720px;
-            padding: 32px 20px;
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            text-align: center;
-        }
-
-        .btn-primary { background: #2563eb; color: white; }
-        .btn-primary:hover { background: #1d4ed8; }
-
-        .btn-secondary {
-            background: #1e293b;
-            color: #e2e8f0;
-            border: 1px solid #334155;
-        }
-        .btn-secondary:hover { border-color: #38bdf8; color: #38bdf8; }
-
-        .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
-
-        .card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 16px;
-        }
-
-        .text-muted { color: #64748b; }
-        .text-sky { color: #38bdf8; }
-        .text-orange { color: #fb923c; }
-        .text-sm { font-size: 0.8rem; }
-        .mt-2 { margin-top: 8px; }
-        .mt-4 { margin-top: 16px; }
-        .mb-4 { margin-bottom: 16px; }
-
-        @yield('styles')
     </style>
 </head>
-<body>
-    <nav class="navbar">
-        <a href="{{ route('home') }}" class="navbar-brand">TempMail</a>
-        @hasSection('email')
-            <span class="navbar-email" onclick="navigator.clipboard.writeText('{{ $email->email }}')">
-                {{ $email->email }}
-            </span>
-        @endif
+<body class="h-full bg-dark-800 text-slate-200 antialiased">
+    <!-- Toast notification -->
+    <div id="toast" class="fixed top-5 right-5 z-50 hidden">
+        <div class="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg animate-slide-up">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span id="toastText">Copied!</span>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-40 border-b border-dark-600 bg-dark-700/95 backdrop-blur">
+        <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+            <a href="{{ route('home') }}" class="flex items-center gap-2 text-lg font-bold text-white hover:text-sky-400 transition">
+                <svg class="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                TempMail
+            </a>
+            @hasSection('email')
+            <div class="flex items-center gap-3">
+                <button onclick="copyEmail('{{ $email->email }}')" class="hidden sm:flex items-center gap-2 rounded-lg border border-dark-600 bg-dark-800 px-3 py-1.5 text-sm text-sky-400 hover:border-sky-500 transition">
+                    <span class="max-w-[200px] truncate">{{ $email->email }}</span>
+                    <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </button>
+            </div>
+            @endif
+        </div>
     </nav>
 
-    <div class="main">
+    <main class="mx-auto w-full max-w-5xl px-4 py-6">
         @yield('content')
-    </div>
+    </main>
+
+    <script>
+        function copyEmail(email) {
+            navigator.clipboard.writeText(email).then(() => showToast('Email copied to clipboard!'));
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').textContent = text;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 2500);
+        }
+    </script>
+    @yield('scripts')
 </body>
 </html>
