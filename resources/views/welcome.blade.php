@@ -68,7 +68,7 @@
 
             <div class="email-meta">
                 <span>Created: {{ $email->created_at->format('H:i, M d') }}</span>
-                <span class="text-orange">Expires: {{ $email->expires_at->diffForHumans() }}</span>
+                <span class="text-orange" id="expiryTimer">Expires: {{ $email->expires_at->diffForHumans() }}</span>
             </div>
         </div>
 
@@ -79,9 +79,7 @@
             </form>
             <a href="{{ route('inbox') }}" class="btn btn-secondary">
                 Inbox
-                @if($messageCount > 0)
-                    <span class="inbox-badge">{{ $messageCount }}</span>
-                @endif
+                <span class="inbox-badge" id="inboxBadge" style="{{ $messageCount > 0 ? '' : 'display:none' }}">{{ $messageCount }}</span>
             </a>
             <button class="btn btn-secondary" onclick="copyEmail()">Copy</button>
         </div>
