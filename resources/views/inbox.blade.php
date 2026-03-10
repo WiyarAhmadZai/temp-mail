@@ -106,7 +106,7 @@
     </div>
 
     <div class="inbox-header">
-        <h2>Inbox <span id="messageCount" class="text-muted text-sm">({{ $messages->count() }})</span></h2>
+        <h2>Inbox <span id="messageCount" class="text-muted text-sm">({{ $messages->total() }})</span></h2>
         <div class="header-right">
             <span class="poll-status">
                 <span class="poll-dot" id="pollDot"></span>
@@ -134,6 +134,26 @@
             @endforeach
         @endif
     </div>
+
+    @if($messages->hasPages())
+        <div style="margin-top:20px; display:flex; justify-content:center; gap:8px;">
+            @if($messages->onFirstPage())
+                <span class="btn btn-secondary btn-sm" style="opacity:0.5;">Previous</span>
+            @else
+                <a href="{{ $messages->previousPageUrl() }}" class="btn btn-secondary btn-sm">Previous</a>
+            @endif
+
+            <span class="text-muted text-sm" style="padding:6px 14px;">
+                Page {{ $messages->currentPage() }} of {{ $messages->lastPage() }}
+            </span>
+
+            @if($messages->hasMorePages())
+                <a href="{{ $messages->nextPageUrl() }}" class="btn btn-secondary btn-sm">Next</a>
+            @else
+                <span class="btn btn-secondary btn-sm" style="opacity:0.5;">Next</span>
+            @endif
+        </div>
+    @endif
 
     <script>
         const POLL_INTERVAL = {{ config('tempmail.inbox_refresh_seconds') * 1000 }};
