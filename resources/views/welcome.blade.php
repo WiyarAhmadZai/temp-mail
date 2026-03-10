@@ -57,6 +57,12 @@
         <h1>TempMail</h1>
         <p class="subtitle">Your temporary email address is ready</p>
 
+        @if(session('error'))
+            <div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.9rem;color:#fecaca;">
+                {{ session('error') }}
+            </div>
+        @endif
+
         <div class="card">
             <div class="text-sm text-muted" style="text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">
                 Your Temporary Email
